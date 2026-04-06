@@ -2,74 +2,114 @@ require('dotenv').config();
 const { chromium } = require('playwright');
 
 (async () => {
-    const browser = await chromium.launch({ headless: false });
+
+    const browser = await chromium.launch({
+        headless: true, // 🔥 set false for debugging
+    });
+
     const page = await browser.newPage();
 
-    console.log("🚀 Starting bot...");
+    console.log("🚀 Bot started at:", new Date().toISOString());
 
-    // ================= LOGIN =================
-    await page.goto('https://www.naukri.com');
+    // ================= LOGIN FUNCTION =================
+    async function login() {
+        console.log("🔐 Logging in...");
 
-    await page.getByRole('link', { name: 'Login', exact: true }).click();
+        await page.goto('https://www.naukri.com');
 
-    await page.getByRole('textbox', { name: /Email/ }).fill(process.env.EMAIL);
-    await page.getByRole('textbox', { name: /password/i }).fill(process.env.PASSWORD);
+        await page.getByRole('link', { name: 'Login', exact: true }).click();
 
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
+        await page.getByRole('textbox', { name: /Email/ }).fill(process.env.EMAIL);
+        await page.getByRole('textbox', { name: /password/i }).fill(process.env.PASSWORD);
 
-    await page.waitForTimeout(5000);
+        await page.getByRole('button', { name: 'Login', exact: true }).click();
 
-    // ================= LOOP =================
+        await page.waitForTimeout(5000);
+
+        console.log("✅ Logged in");
+    }
+
+    // ================= POPUP HANDLER =================
+    async function closePopup() {
+        try {
+            await page.locator('.crossLayer .icon').click({ timeout: 3000 });
+            console.log("❌ Popup closed");
+        } catch (e) { }
+    }
+
+    // ================= UPDATE FUNCTION =================
+    async function updateProfile() {
+
+        console.log("🔁 Updating profile...");
+
+        await page.goto('https://www.naukri.com/mnjuser/profile');
+        await page.waitForTimeout(5000);
+
+        await closePopup();
+
+        // Click Edit (Resume Headline)
+        const editBtn = page.locator('#lazyResumeHead span.edit');
+
+        await editBtn.waitFor({ timeout: 10000 });
+        await editBtn.click({ force: true });
+
+        // Textarea
+        const textarea = page.locator('#resumeHeadlineTxt');
+        await textarea.waitFor();
+
+        let text = await textarea.inputValue();
+
+        // Toggle dot logic
+        text = text.endsWith('.') ? text.slice(0, -1) : text + '.';
+
+        await textarea.fill(text);
+
+        // Save (scoped to correct form)
+        await page.locator('form[name="resumeHeadlineForm"] button[type="submit"]').click();
+
+        console.log("✅ Profile updated:", text);
+
+        await closePopup();
+    }
+
+    // ================= MAIN FLOW =================
+
+    await login();
+
     while (true) {
 
-        try {
-            console.log("🔁 Updating profile...");
-
-            // Go to profile
-            await page.goto('https://www.naukri.com/mnjuser/profile');
-            await page.waitForTimeout(5000);
-
-            // 🔥 Close popup if exists
+        for (let attempt = 1; attempt <= 3; attempt++) {
             try {
-                await page.locator('.crossLayer .icon').click({ timeout: 3000 });
-                console.log("Popup closed");
-            } catch (e) { }
 
-            // ================= CLICK EDIT =================
-            const editBtn = page.locator('#lazyResumeHead span.edit');
+                // 🔥 Check session (auto re-login)
+                if (page.url().includes('login')) {
+                    console.log("⚠️ Session expired. Re-logging...");
+                    await login();
+                }
 
-            await editBtn.waitFor({ timeout: 10000 });
-            await editBtn.click();
+                await updateProfile();
 
-            // ================= UPDATE TEXT =================
-            const textarea = page.locator('#resumeHeadlineTxt');
+                break; // success → exit retry loop
 
-            await textarea.waitFor();
+            } catch (err) {
+                console.log(`❌ Attempt ${attempt} failed:`, err.message);
 
-            let text = await textarea.inputValue();
-
-            // Toggle dot (same logic as your Selenium)
-            text = text.endsWith('.') ? text.slice(0, -1) : text + '.';
-
-            await textarea.fill(text);
-
-            // ================= SAVE =================
-            await page.locator('form[name="resumeHeadlineForm"] button[type="submit"]').click();
-
-            console.log("✅ Profile updated:", text);
-
-            // 🔥 Close popup again if appears
-            try {
-                await page.locator('.crossLayer .icon').click({ timeout: 3000 });
-            } catch (e) { }
-
-        } catch (err) {
-            console.log("❌ Error in update cycle:", err.message);
+                if (attempt === 3) {
+                    console.log("🚨 Skipping this cycle...");
+                } else {
+                    console.log("🔄 Retrying in 5 seconds...");
+                    await page.waitForTimeout(5000);
+                }
+            }
         }
 
-        // ================= WAIT =================
+        // ================= RANDOM DELAY =================
         const delay = (25 + Math.random() * 10) * 60 * 1000;
-        console.log(`⏳ Waiting ${Math.round(delay / 60000)} minutes...`);
+
+        console.log(
+            `⏳ Waiting ${Math.round(delay / 60000)} minutes...`
+        );
+
         await page.waitForTimeout(delay);
     }
 

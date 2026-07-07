@@ -1,10 +1,11 @@
 require('dotenv').config();
 const { chromium } = require('playwright');
 
+
 (async () => {
 
     const browser = await chromium.launch({
-        headless: true, // 🔥 set false for debugging
+        headless: false, // 🔥 set false for debugging
     });
 
     const page = await browser.newPage();
@@ -13,20 +14,32 @@ const { chromium } = require('playwright');
 
     // ================= LOGIN FUNCTION =================
     async function login() {
-        console.log("🔐 Logging in...");
+        console.log("🔐 Checking login status...");
 
         await page.goto('https://www.naukri.com');
+        await page.waitForTimeout(3000);
 
-        await page.getByRole('link', { name: 'Login', exact: true }).click();
+        // Check if Login button exists
+        const loginBtn = page.getByRole('link', { name: 'Login', exact: true });
 
-        await page.getByRole('textbox', { name: /Email/ }).fill(process.env.EMAIL);
-        await page.getByRole('textbox', { name: /password/i }).fill(process.env.PASSWORD);
+        if (await loginBtn.isVisible().catch(() => false)) {
 
-        await page.getByRole('button', { name: 'Login', exact: true }).click();
+            console.log("🔐 Logging in...");
 
-        await page.waitForTimeout(5000);
+            await loginBtn.click();
 
-        console.log("✅ Logged in");
+            await page.getByRole('textbox', { name: /Email/ }).fill(process.env.EMAIL);
+            await page.getByRole('textbox', { name: /password/i }).fill(process.env.PASSWORD);
+
+            await page.getByRole('button', { name: 'Login', exact: true }).click();
+
+            await page.waitForTimeout(5000);
+
+            console.log("✅ Logged in");
+
+        } else {
+            console.log("✅ Already logged in, skipping login");
+        }
     }
 
     // ================= POPUP HANDLER =================
